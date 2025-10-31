@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>دفتر المصروفات اليومية</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { 
+            margin: 0; 
+            padding: 0; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow-x: hidden;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        
+        // أيقونات بسيطة بدلاً من lucide-react
+        const CalendarIcon = () => <span style={{fontSize: '24px'}}>📅</span>;
+        const TrashIcon = () => <span style={{fontSize: '18px'}}>🗑️</span>;
+        const PlusIcon = () => <span style={{fontSize: '20px'}}>➕</span>;
+        const TrendingUpIcon = () => <span style={{fontSize: '16px'}}>📈</span>;
+        const DollarIcon = () => <span style={{fontSize: '16px'}}>💰</span>;
+        const ChartIcon = () => <span style={{fontSize: '16px'}}>📊</span>;
+
+        function ExpenseTracker() {
+            const [entries, setEntries] = useState([]);
+            const [currentDate, setCurrentDate] = useState(new Date().toISOString().split('T')[0]);
+            const [expense, setExpense] = useState('');
+            const [income, setIncome] = useState('');
+            const [description, setDescription] = useState('');
+            const [type, setType] = useState('expense');
+            const [viewMode, setViewMode] = useState('daily');
+
+            useEffect(() => {
+                loadData();
+            }, []);
+
+            useEffect(() => {
+                saveData();
+            }, [entries]);
+
+            const loadData = () => {
+                try {
+                    const saved = localStorage.getItem('expense-tracker-data');
+                    if (saved) {
+                        setEntries(JSON.parse(saved));
+                    }
+                } catch (error) {
+                    console.log('No previous data found');
+                }
+            };
+
+            const saveData = () => {
+                try {
+                    localStorage.setItem('expense-tracker-data', JSON.stringify(entries));
+                } catch (error) {
+                    console.error('Error saving data:', error);
+                }
+            };
+
+            const addEntry = () => {
+                if ((type === 'expense' && !expense) || (type === 'income' && !income) || !description) {
+                    alert('الرجاء ملء جميع الحقول');
+                    return;
+                }
+
+                const newEntry = {
+                    id: Date.now(),
+                    date: currentDate,
+                    type,
+                    amount: parseFloat(type === 'expense' ? expense : income),
+                    description
+                };
+
+                setEntries([newEntry, ...entries]);
+                setExpense('');
+                setIncome('');
+                setDescription('');
+            };
+
+            const deleteEntry = (id) => {
+                if (confirm('هل تريد حذف هذا السجل؟')) {
+                    setEntries(entries.filter(entry => entry.id !== id));
+                }
+            };
+
+            const getWeekNumber = (date) => {
+                const d = new Date(date);
+                d.setHours(0, 0, 0, 0);
+                d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+                const yearStart = new Date(d.getFullYear(), 0, 1);
+                const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+                return `${d.getFullYear()}-W${weekNo}`;
+            };
+
+            const getMonthYear = (date) => {
+                const d = new Date(date);
+                return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            };
+
+            const groupedEntries = entries.reduce((acc, entry) => {
+                let key;
+                if (viewMode === 'daily') {
+                    key = entry.date;
+                } else if (viewMode === 'weekly') {
+                    key = getWeekNumber(entry.date);
+                } else {
+                    key = getMonthYear(entry.date);
+                }
+                
+                if (!acc[key]) {
+                    acc[key] = [];
+                }
+                acc[key].push(entry);
+                return acc;
+            }, {});
+
+            const calculateTotal = (groupEntries) => {
+                const totalIncome = groupEntries
+                    .filter(e => e.type === 'income')
+                    .reduce((sum, e) => sum + e.amount, 0);
+                const totalExpense = groupEntries
+                    .filter(e => e.type === 'expense')
+                    .reduce((sum, e) => sum + e.amount, 0);
+                return { totalIncome, totalExpense, balance: totalIncome - totalExpense };
+            };
+
+            const calculateOverallTotal = () => {
+                const totalIncome = entries
+                    .filter(e => e.type === 'income')
+                    .reduce((sum, e) => sum + e.amount, 0);
+                const totalExpense = entries
+                    .filter(e => e.type === 'expense')
+                    .reduce((sum, e) => sum + e.amount, 0);
+                return { totalIncome, totalExpense, balance: totalIncome - totalExpense };
+            };
+
+            const getMonthName = (monthYear) => {
+                const [year, month] = monthYear.split('-');
+                const date = new Date(year, parseInt(month) - 1);
+                return date.toLocaleDateString('ar-DZ', { year: 'numeric', month: 'long' });
+            };
+
+            const getWeekRange = (weekStr) => {
+                const [year, week] = weekStr.split('-W');
+                const firstDayOfYear = new Date(year, 0, 1);
+                const daysOffset = (parseInt(week) - 1) * 7;
+                const weekStart = new Date(firstDayOfYear.setDate(firstDayOfYear.getDate() + daysOffset - firstDayOfYear.getDay() + 1));
+                const weekEnd = new Date(weekStart);
+                weekEnd.setDate(weekStart.getDate() + 6);
+                
+                return `${weekStart.toLocaleDateString('ar-DZ', { day: 'numeric', month: 'short' })} - ${weekEnd.toLocaleDateString('ar-DZ', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+            };
+
+            const overall = calculateOverallTotal();
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4" dir="rtl">
+                    <div className="max-w-4xl mx-auto">
+                        <div className="bg-white rounded-2xl shadow-xl p-6 mb-6">
+                            <h1 className="text-3xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+                                <CalendarIcon />
+                                دفتر المصروفات اليومية
+                            </h1>
+
+                            <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl p-6 mb-6 text-white">
+                                <div className="grid grid-cols-3 gap-4 text-center">
+                                    <div>
+                                        <div className="text-sm opacity-90 flex items-center justify-center gap-1">
+                                            <TrendingUpIcon />
+                                            إجمالي الدخل
+                                        </div>
+                                        <div className="text-2xl font-bold">{overall.totalIncome.toFixed(2)} دج</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-sm opacity-90 flex items-center justify-center gap-1">
+                                            <DollarIcon />
+                                            إجمالي المصروف
+                                        </div>
+                                        <div className="text-2xl font-bold">{overall.totalExpense.toFixed(2)} دج</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-sm opacity-90 flex items-center justify-center gap-1">
+                                            <ChartIcon />
+                                            الرصيد
+                                        </div>
+                                        <div className={`text-2xl font-bold ${overall.balance >= 0 ? 'text-green-200' : 'text-red-200'}`}>
+                                            {overall.balance.toFixed(2)} دج
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-4 mb-6">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">التاريخ</label>
+                                    <input
+                                        type="date"
+                                        value={currentDate}
+                                        onChange={(e) => setCurrentDate(e.target.value)}
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">النوع</label>
+                                    <div className="flex gap-4">
+                                        <button
+                                            onClick={() => setType('expense')}
+                                            className={`flex-1 py-2 px-4 rounded-lg font-medium transition ${
+                                                type === 'expense'
+                                                    ? 'bg-red-500 text-white'
+                                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                            }`}
+                                        >
+                                            مصروف
+                                        </button>
+                                        <button
+                                            onClick={() => setType('income')}
+                                            className={`flex-1 py-2 px-4 rounded-lg font-medium transition ${
+                                                type === 'income'
+                                                    ? 'bg-green-500 text-white'
+                                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                            }`}
+                                        >
+                                            دخل
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {type === 'expense' ? (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">المبلغ المصروف</label>
+                                        <input
+                                            type="number"
+                                            value={expense}
+                                            onChange={(e) => setExpense(e.target.value)}
+                                            placeholder="0.00"
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                        />
+                                    </div>
+                                ) : (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">المبلغ الداخل</label>
+                                        <input
+                                            type="number"
+                                            value={income}
+                                            onChange={(e) => setIncome(e.target.value)}
+                                            placeholder="0.00"
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                        />
+                                    </div>
+                                )}
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        {type === 'expense' ? 'ماذا اشتريت؟' : 'مصدر الدخل'}
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={description}
+                                        onChange={(e) => setDescription(e.target.value)}
+                                        placeholder={type === 'expense' ? 'مثال: خبز، حليب، لحم...' : 'مثال: راتب، هدية...'}
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    />
+                                </div>
+
+                                <button
+                                    onClick={addEntry}
+                                    className="w-full bg-indigo-600 text-white py-3 rounded-lg font-medium hover:bg-indigo-700 transition flex items-center justify-center gap-2"
+                                >
+                                    <PlusIcon />
+                                    إضافة
+                                </button>
+                            </div>
+
+                            <div className="border-t pt-4">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">عرض حسب:</label>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => setViewMode('daily')}
+                                        className={`flex-1 py-2 px-4 rounded-lg font-medium transition ${
+                                            viewMode === 'daily'
+                                                ? 'bg-indigo-600 text-white'
+                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                        }`}
+                                    >
+                                        يومي
+                                    </button>
+                                    <button
+                                        onClick={() => setViewMode('weekly')}
+                                        className={`flex-1 py-2 px-4 rounded-lg font-medium transition ${
+                                            viewMode === 'weekly'
+                                                ? 'bg-indigo-600 text-white'
+                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                        }`}
+                                    >
+                                        أسبوعي
+                                    </button>
+                                    <button
+                                        onClick={() => setViewMode('monthly')}
+                                        className={`flex-1 py-2 px-4 rounded-lg font-medium transition ${
+                                            viewMode === 'monthly'
+                                                ? 'bg-indigo-600 text-white'
+                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                        }`}
+                                    >
+                                        شهري
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-4">
+                            {Object.keys(groupedEntries).length === 0 ? (
+                                <div className="bg-white rounded-xl shadow p-8 text-center text-gray-500">
+                                    لا توجد مدخلات بعد. ابدأ بإضافة أول مصروف أو دخل!
+                                </div>
+                            ) : (
+                                Object.keys(groupedEntries)
+                                    .sort((a, b) => b.localeCompare(a))
+                                    .map((key) => {
+                                        const groupEntries = groupedEntries[key];
+                                        const total = calculateTotal(groupEntries);
+                                        
+                                        let displayTitle;
+                                        if (viewMode === 'daily') {
+                                            displayTitle = new Date(key + 'T00:00:00').toLocaleDateString('ar-DZ', {
+                                                weekday: 'long',
+                                                year: 'numeric',
+                                                month: 'long',
+                                                day: 'numeric'
+                                            });
+                                        } else if (viewMode === 'weekly') {
+                                            displayTitle = `أسبوع ${key.split('-W')[1]} - ${getWeekRange(key)}`;
+                                        } else {
+                                            displayTitle = getMonthName(key);
+                                        }
+                                        
+                                        return (
+                                            <div key={key} className="bg-white rounded-xl shadow-lg overflow-hidden">
+                                                <div className="bg-indigo-600 text-white px-6 py-4">
+                                                    <div className="flex justify-between items-center">
+                                                        <div className="font-bold text-lg">{displayTitle}</div>
+                                                        <div className="text-sm">
+                                                            الرصيد: <span className={total.balance >= 0 ? 'text-green-200' : 'text-red-200'}>
+                                                                {total.balance.toFixed(2)} دج
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="p-4 space-y-2">
+                                                    {groupEntries
+                                                        .sort((a, b) => new Date(b.date) - new Date(a.date))
+                                                        .map((entry) => (
+                                                        <div
+                                                            key={entry.id}
+                                                            className={`flex items-center justify-between p-3 rounded-lg ${
+                                                                entry.type === 'expense' ? 'bg-red-50' : 'bg-green-50'
+                                                            }`}
+                                                        >
+                                                            <div className="flex-1">
+                                                                <div className="font-medium text-gray-800">{entry.description}</div>
+                                                                <div className="flex items-center gap-2 text-xs text-gray-500">
+                                                                    <span className={entry.type === 'expense' ? 'text-red-600' : 'text-green-600'}>
+                                                                        {entry.type === 'expense' ? 'مصروف' : 'دخل'}
+                                                                    </span>
+                                                                    {viewMode !== 'daily' && (
+                                                                        <span>• {new Date(entry.date).toLocaleDateString('ar-DZ', { day: 'numeric', month: 'short' })}</span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center gap-4">
+                                                                <div className={`text-lg font-bold ${
+                                                                    entry.type === 'expense' ? 'text-red-600' : 'text-green-600'
+                                                                }`}>
+                                                                    {entry.type === 'expense' ? '-' : '+'}{entry.amount.toFixed(2)} دج
+                                                                </div>
+                                                                <button
+                                                                    onClick={() => deleteEntry(entry.id)}
+                                                                    className="text-red-500 hover:text-red-700 transition"
+                                                                >
+                                                                    <TrashIcon />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                    
+                                                    <div className="pt-3 border-t mt-4 bg-gray-50 rounded-lg p-3">
+                                                        <div className="grid grid-cols-3 gap-4 text-center">
+                                                            <div>
+                                                                <div className="text-xs text-gray-600 mb-1">الدخل</div>
+                                                                <div className="text-green-600 font-bold">{total.totalIncome.toFixed(2)} دج</div>
+                                                            </div>
+                                                            <div>
+                                                                <div className="text-xs text-gray-600 mb-1">المصروف</div>
+                                                                <div className="text-red-600 font-bold">{total.totalExpense.toFixed(2)} دج</div>
+                                                            </div>
+                                                            <div>
+                                                                <div className="text-xs text-gray-600 mb-1">المجموع</div>
+                                                                <div className={`font-bold ${total.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                                    {total.balance.toFixed(2)} دج
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<ExpenseTracker />, document.getElementById('root'));
+    </script>
+</body>
+</html>
